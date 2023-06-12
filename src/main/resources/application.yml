@@ -1,5 +1,5 @@
 websocket:
-  link: "${WEB_SOCKET_URL:localhost:7070/steve/websocket/CentralSystemService}"
+  link: "${WEB_SOCKET_URL:localhost:8081/steve/websocket/CentralSystemService}"
 
 chargebox:
   id: "${chargeboxId}"

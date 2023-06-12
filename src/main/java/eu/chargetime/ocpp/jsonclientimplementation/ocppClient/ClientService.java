@@ -33,13 +33,14 @@ public class ClientService {
     @Autowired
     private ApiConfigurations apiConfigurations;
 
+
     @GetMapping(path = "/Authorize")
     public ResponseEntity<Object> Authorize(
             @RequestParam("IdTag") String IdTag
     ) throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
-        String url = "ws://" + apiConfigurations.getWebSocketBaseUrl() + "/" + apiConfigurations.getChargeBoxId();
+        String url = "ws://" + apiConfigurations.getWebSocketBaseUrl()+"/"+apiConfigurations.getChargeBoxId();
 
         AuthorizeRequest testRequest = clientCoreProfile.createAuthorizeRequest(IdTag);
         jsonClient.connect(url, null);
@@ -52,7 +53,7 @@ public class ClientService {
                 resInf.put("Message","Authorize Fail");
             }
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -65,23 +66,25 @@ public class ClientService {
 
     @PostMapping(path = "/StartTransaction")
     public ResponseEntity<Object> StartTransaction(
-            @RequestParam("connectorId") Integer connectorId,
-            @RequestParam("IdTag") String IdTag
+            @RequestParam(name = "connectorId") int connectorId,
+            @RequestParam(name = "idTag") String IdTag,
+            @RequestParam(name = "meterStart") int meterStart,
+            @RequestParam(name = "reservationId", required = false) Integer reservationId
     )throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
         String url = "ws://" + apiConfigurations.getWebSocketBaseUrl()+"/"+apiConfigurations.getChargeBoxId();
-        int meterStart = 2;
         ZonedDateTime timestamp = ZonedDateTime.now();
 
         StartTransactionRequest request = clientCoreProfile.createStartTransactionRequest(connectorId, IdTag, meterStart, timestamp);
+        request.setReservationId(reservationId);
         jsonClient.connect(url, null);
         try {
             StartTransactionConfirmation confirmation = (StartTransactionConfirmation) jsonClient.send(request)
                     .toCompletableFuture().get();
             resInf.put("info",confirmation.getIdTagInfo().toString());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -93,8 +96,12 @@ public class ClientService {
 
     @PostMapping(path = "/StopTransaction")
     public ResponseEntity<Object> StopTransaction(
-            @RequestParam("stopValue") Integer stopValue,
-            @RequestParam("transactionId") Integer transactionId
+            @RequestParam(name = "stopValue") Integer stopValue,
+            @RequestParam(name = "transactionId") Integer transactionId,
+            @RequestParam(name = "idTag", required = false, defaultValue = "") String idTag,
+            @RequestParam(name = "reason") Reason reason,
+            @RequestParam(name = "transactionData", required = false) MeterValue[] transactionData
+
     ) throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
@@ -102,14 +109,15 @@ public class ClientService {
         ZonedDateTime timestamp = ZonedDateTime.now();
 
         StopTransactionRequest request = clientCoreProfile.createStopTransactionRequest(stopValue, timestamp, transactionId);
-        request.setReason(Reason.PowerLoss);
-
+        request.setReason(reason);
+        request.setIdTag(idTag);
+        request.setTransactionData(transactionData);
         jsonClient.connect(url, null);
         try {
             StopTransactionConfirmation confirmation = (StopTransactionConfirmation) jsonClient.send(request)
                     .toCompletableFuture().get();
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -121,24 +129,30 @@ public class ClientService {
 
     @PostMapping(path = "/StatusNotification")
     public ResponseEntity<Object> StatusNotification(
-            @RequestParam("connectorId") Integer connectorId
+            @RequestParam(name = "connectorId") Integer connectorId,
+            @RequestParam(name = "errorCode") ChargePointErrorCode errorCode,
+            @RequestParam(name = "info", required = false, defaultValue = "") String info,
+            @RequestParam(name = "status") ChargePointStatus status,
+            @RequestParam(name = "vendorId", required = false, defaultValue = "") String vendorId,
+            @RequestParam(name = "vendorErrorCode", required = false, defaultValue = "") String vendorErrorCode
     ) throws Exception {
         Map<String, Object> reqMap = new HashMap<>();
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
         String url = "ws://" + apiConfigurations.getWebSocketBaseUrl() + "/" + apiConfigurations.getChargeBoxId();
 
-        ChargePointErrorCode errorCode = ChargePointErrorCode.NoError;
-        ChargePointStatus status = ChargePointStatus.Charging;
 
         StatusNotificationRequest request = clientCoreProfile.createStatusNotificationRequest(connectorId, errorCode, status);
+        request.setInfo(info);
+        request.setVendorId(vendorId);
+        request.setVendorErrorCode(vendorErrorCode);
         jsonClient.connect(url, null);
         try {
             StatusNotificationConfirmation confirmation = (StatusNotificationConfirmation) jsonClient.send(request)
                     .toCompletableFuture().get();
             resInf.put("Message", confirmation.toString());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -161,7 +175,7 @@ public class ClientService {
                     .toCompletableFuture().get();
             resInf.put("Message", confirmation.getCurrentTime());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -171,30 +185,39 @@ public class ClientService {
     }
 
     @PostMapping(path = "/BootNotification")
-    public ResponseEntity<Object> BootNotification()
+    public ResponseEntity<Object> BootNotification(
+            @RequestParam(name= "chargeBoxSerialNumber", required = false, defaultValue = "") String chargeBoxSerialNumber,
+            @RequestParam(name= "chargePointModel") String chargePointModel,
+            @RequestParam(name= "chargePointSerialNumber", required = false, defaultValue = "") String chargePointSerialNumber,
+            @RequestParam(name= "chargePointVendor") String chargePointVendor,
+            @RequestParam(name= "firmwareVersion", required = false, defaultValue = "") String firmwareVersion,
+            @RequestParam(name= "iccid", required = false, defaultValue = "") String iccid,
+            @RequestParam(name= "imsi", required = false, defaultValue = "") String imsi,
+            @RequestParam(name= "meterSerialNumber", required = false, defaultValue = "") String meterSerialNumber,
+            @RequestParam(name= "meterType", required = false, defaultValue = "") String meterType
+    )
             throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
         String url = "ws://" + apiConfigurations.getWebSocketBaseUrl() + "/" + apiConfigurations.getChargeBoxId();
 
-        String vendor = "Dasvision Vendor";
-        String model = "TruongVD";
-
-        BootNotificationRequest request = clientCoreProfile.createBootNotificationRequest(vendor, model);
-        request.setImsi("IMSI Dasvision");
-        request.setIccid("ICCID Dasvision");
-        request.setFirmwareVersion("Version 1.0 for 1.6 Dasvision");
-        request.setMeterType("MeterType Dasvision");
-        request.setChargePointSerialNumber("#CP Serial Dasvision");
-        request.setMeterSerialNumber("#Meter Serial Dasvision");
-
+        BootNotificationRequest request = clientCoreProfile.createBootNotificationRequest(chargePointVendor, chargePointModel);
+        request.setImsi(imsi);
+        request.setIccid(iccid);
+        request.setFirmwareVersion(firmwareVersion);
+        request.setMeterType(meterType);
+        request.setChargePointSerialNumber(chargePointSerialNumber);
+        request.setMeterSerialNumber(meterSerialNumber);
+        request.setChargePointVendor(chargePointVendor);
+        request.setChargePointModel(chargePointModel);
+        request.setChargeBoxSerialNumber(chargeBoxSerialNumber);
         jsonClient.connect(url, null);
         try {
             BootNotificationConfirmation confirmation = (BootNotificationConfirmation) jsonClient.send(request)
                     .toCompletableFuture().get();
             resInf.put("Status", confirmation.getStatus());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -204,30 +227,26 @@ public class ClientService {
     }
 
     @PostMapping(path = "/MeterValues")
-    public ResponseEntity<Object> MeterValues()
+    public ResponseEntity<Object> MeterValues(
+            @RequestParam(name = "connectorId") Integer connectorId,
+            @RequestParam(name = "transactionId", required = false) Integer transactionId,
+            @RequestParam(name = "meterValue") MeterValue[] meterValue
+    )
             throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
         String url = "ws://" + apiConfigurations.getWebSocketBaseUrl() + "/" + apiConfigurations.getChargeBoxId();
 
-        int connectorId = 7;
-        SampledValue[] sampledValue = new SampledValue[1];
-        sampledValue[0] = new SampledValue("1000");
-        sampledValue[0].setUnit("W");
-        sampledValue[0].setLocation(Location.Body);
-        sampledValue[0].setMeasurand("Frequency");
-
-        MeterValue meterValue = new MeterValue(ZonedDateTime.now(), sampledValue);
 
         MeterValuesRequest request = clientCoreProfile.createMeterValuesRequest(connectorId, meterValue);
-
+        request.setTransactionId(transactionId);
         jsonClient.connect(url, null);
         try {
             MeterValuesConfirmation confirmation = (MeterValuesConfirmation) jsonClient.send(request)
                     .toCompletableFuture().get();
             resInf.put("Message", confirmation.toString());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
@@ -239,15 +258,15 @@ public class ClientService {
 
     @PostMapping(path = "/DataTransfer")
     public ResponseEntity<Object> DataTransfer(
-            @RequestParam("vendor") String vendor,
-            @RequestParam(name = "MessageID", required = false) String messageID,
-            @RequestParam(name = "Data", required = false) String data
+            @RequestParam("vendorId") String vendorId,
+            @RequestParam(name = "messageID", required = false) String messageID,
+            @RequestParam(name = "data", required = false) String data
     ) throws Exception {
         Map<String, Object> resInf = new HashMap<>();
         JSONObject res;
         String url = "ws://" + apiConfigurations.getWebSocketBaseUrl() + "/" + apiConfigurations.getChargeBoxId();
 
-        DataTransferRequest request = clientCoreProfile.createDataTransferRequest(vendor);
+        DataTransferRequest request = clientCoreProfile.createDataTransferRequest(vendorId);
         if(messageID != null && data != null){
             request.setMessageId(messageID);
             request.setData(data);
@@ -258,7 +277,7 @@ public class ClientService {
                     .toCompletableFuture().get();
             resInf.put("Message", confirmation.toString());
         } catch (OccurenceConstraintException | UnsupportedFeatureException
-                 | ExecutionException | InterruptedException e) {
+                | ExecutionException | InterruptedException e) {
             log.error("Exception occurred: " + e);
             log.error("Test will fail");
         }
