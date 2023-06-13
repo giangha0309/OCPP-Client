@@ -1,56 +1,12 @@
 package eu.chargetime.ocpp.jsonclientimplementation.ocppClient;
 
-import com.pi4j.plugin.mock.provider.gpio.analog.MockAnalogInputProvider;
-import com.pi4j.plugin.mock.provider.gpio.analog.MockAnalogOutputProvider;
-import com.pi4j.plugin.mock.provider.gpio.digital.MockDigitalInputProvider;
-import com.pi4j.plugin.mock.provider.gpio.digital.MockDigitalOutputProvider;
-import com.pi4j.plugin.mock.provider.i2c.MockI2CProvider;
-import com.pi4j.plugin.mock.provider.pwm.MockPwmProvider;
-import com.pi4j.plugin.mock.provider.serial.MockSerialProvider;
-import com.pi4j.plugin.mock.provider.spi.MockSpiProvider;
-import eu.chargetime.ocpp.JSONClient;
 import eu.chargetime.ocpp.feature.profile.ClientCoreEventHandler;
 import eu.chargetime.ocpp.model.core.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 
-import com.pi4j.io.gpio.GpioController;
-import com.pi4j.io.gpio.GpioFactory;
-import com.pi4j.io.gpio.GpioPinDigitalOutput;
-import com.pi4j.io.gpio.PinState;
-import com.pi4j.io.gpio.RaspiPin;
-
-
 @Slf4j
 public class ClientCoreEventHandlerConfig {
-
-    private GpioController gpio;
-
-    private GpioPinDigitalOutput relay;
-
-//    Context pi4j = Pi4J.newContextBuilder()
-//            .add(new MockPlatform())
-//            .add(MockAnalogInputProvider.newInstance(),
-//                    MockAnalogOutputProvider.newInstance(),
-//                    MockSpiProvider.newInstance(),
-//                    MockPwmProvider.newInstance(),
-//                    MockSerialProvider.newInstance(),
-//                    MockI2CProvider.newInstance(),
-//                    MockDigitalInputProvider.newInstance(),
-//                    MockDigitalOutputProvider.newInstance())
-////            .add(new MyCustomADCProvider(/* implements AnalogInputProvider, id="my-adc-prov" */))
-////            .add(new MyCustomSPIProvider(/* implements SpiProvider, id="my-spi-prov" */))
-//            .build();
-
-
-//    public ClientCoreEventHandlerConfig() {
-//
-//        // Create a GPIO controller instance
-//        gpio = GpioFactory.getInstance();
-//
-//        // Specify the GPIO pin number for relay control
-//        relay = gpio.provisionDigitalOutputPin(RaspiPin.GPIO_01, "Relay", PinState.LOW);
-//    }
 
     @Bean
     public ClientCoreEventHandler configTestClient() {
@@ -58,88 +14,136 @@ public class ClientCoreEventHandlerConfig {
             @Override
             public ChangeAvailabilityConfirmation handleChangeAvailabilityRequest(ChangeAvailabilityRequest request) {
                 System.out.println(request);
-                // ... handle event
-
-//                // Code to interact with the real charger point and change the availability
-//                if (request.getType() == AvailabilityType.Inoperative) {
-//                    relay.low(); // Deactivate the relay
-//                } else {
-//                    relay.high(); // Activate the relay
-//                }
-
-                return new ChangeAvailabilityConfirmation(AvailabilityStatus.Accepted);
+                if(request.getConnectorId() == 1 && request.getType() == AvailabilityType.valueOf("Operative")){
+                    return new ChangeAvailabilityConfirmation(AvailabilityStatus.Accepted);
+                }
+                else if(request.getConnectorId() == 1 && request.getType() == AvailabilityType.valueOf("Inoperative")){
+                    return new ChangeAvailabilityConfirmation(AvailabilityStatus.Rejected);
+                }
+                else{
+                    return new ChangeAvailabilityConfirmation(AvailabilityStatus.Scheduled);
+                }
             }
 
             @Override
             public GetConfigurationConfirmation handleGetConfigurationRequest(GetConfigurationRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                GetConfigurationConfirmation getConfigurationConfirmation = new GetConfigurationConfirmation();
+                KeyValueType[] keyValueTypes = new KeyValueType[request.getKey().length];
+                int i = 0;
+                for(String key : request.getKey()){
+                    KeyValueType keyValueType = new KeyValueType();
+                    keyValueType.setKey(key);
+                    keyValueType.setValue("value");
+                    keyValueType.setReadonly(true);
+                    keyValueTypes[i] = keyValueType;
+                    i ++;
+                }
+                getConfigurationConfirmation.setConfigurationKey(keyValueTypes);
+                if(request.getKey().length > 0){
+                    return getConfigurationConfirmation;
+                }
+                return null;
             }
 
             @Override
             public ChangeConfigurationConfirmation handleChangeConfigurationRequest(ChangeConfigurationRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.getKey().isBlank()){
+                    return new ChangeConfigurationConfirmation(ConfigurationStatus.Rejected);
+                }
+                else if(request.getValue().isBlank()){
+                    return new ChangeConfigurationConfirmation(ConfigurationStatus.Rejected);
+                }
+                else if(request.validate()){
+                    return new ChangeConfigurationConfirmation(ConfigurationStatus.Accepted);
+                }
+                else if(request.transactionRelated()){
+                    return new ChangeConfigurationConfirmation(ConfigurationStatus.NotSupported);
+                }
+                else{
+                    return new ChangeConfigurationConfirmation(ConfigurationStatus.RebootRequired);
+                }
             }
 
             @Override
             public ClearCacheConfirmation handleClearCacheRequest(ClearCacheRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.validate()){
+                    return new ClearCacheConfirmation(ClearCacheStatus.Accepted);
+                }
+                else{
+                    return new ClearCacheConfirmation(ClearCacheStatus.Rejected);
+                }
             }
 
             @Override
             public DataTransferConfirmation handleDataTransferRequest(DataTransferRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                DataTransferConfirmation dataTransferConfirmation = new DataTransferConfirmation();
+                dataTransferConfirmation.setData(request.getData());
+                if(request.getVendorId().equals("1")){
+                    dataTransferConfirmation.setStatus(DataTransferStatus.Accepted);
+                }
+                else{
+                    dataTransferConfirmation.setStatus(DataTransferStatus.Rejected);
+                }
+                return dataTransferConfirmation;
             }
 
             @Override
             public RemoteStartTransactionConfirmation handleRemoteStartTransactionRequest(RemoteStartTransactionRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.getIdTag().equals("1")){
+                    return new RemoteStartTransactionConfirmation(RemoteStartStopStatus.Accepted);
+                }
+                else{
+                    return new RemoteStartTransactionConfirmation(RemoteStartStopStatus.Rejected);
+                }
             }
 
             @Override
             public RemoteStopTransactionConfirmation handleRemoteStopTransactionRequest(RemoteStopTransactionRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.getTransactionId() > 3){
+                    return new RemoteStopTransactionConfirmation(RemoteStartStopStatus.Rejected);
+                }
+                else{
+                    return new RemoteStopTransactionConfirmation(RemoteStartStopStatus.Accepted);
+                }
             }
 
             @Override
             public ResetConfirmation handleResetRequest(ResetRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.getType() == ResetType.Hard){
+                    return new ResetConfirmation(ResetStatus.Accepted);
+                }
+                else{
+                    return new ResetConfirmation(ResetStatus.Rejected);
+                }
             }
 
             @Override
             public UnlockConnectorConfirmation handleUnlockConnectorRequest(UnlockConnectorRequest request) {
 
                 System.out.println(request);
-                // ... handle event
-
-                return null; // returning null means unsupported feature
+                if(request.getConnectorId() < 0){
+                    return new UnlockConnectorConfirmation(UnlockStatus.UnlockFailed);
+                }
+                else if(request.getConnectorId() > 10){
+                    return new UnlockConnectorConfirmation(UnlockStatus.NotSupported);
+                }
+                else{
+                    return new UnlockConnectorConfirmation(UnlockStatus.Unlocked);
+                }
             }
         };
     }
